@@ -1,0 +1,15 @@
+[Unit]
+Description=Screen Time — screen time tracking daemon
+After=graphical-session.target
+PartOf=graphical-session.target
+
+[Service]
+Environment=DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/%U/bus
+Environment=XDG_SESSION_TYPE=wayland
+Environment=WAYLAND_DISPLAY=wayland-0
+ExecStart=%h/.local/bin/screen-time
+Restart=on-failure
+RestartSec=5s
+
+[Install]
+WantedBy=default.target

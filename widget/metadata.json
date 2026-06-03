@@ -1,0 +1,21 @@
+{
+    "KPlugin": {
+        "Id": "com.github.kathbigra.activitymonitor",
+        "Name": "Screen Time",
+        "Description": "Track and display screen time per application",
+        "Icon": "com.github.kathbigra.activitymonitor",
+        "Category": "Utilities",
+        "Authors": [
+            {
+                "Name": "Faisal Dilawar",
+                "Email": "dilawar.faisal@gmail.com"
+            }
+        ],
+        "License": "Proprietary",
+        "Version": "1.0",
+        "Website": "https://github.com/kathbigra/activity-monitor-widget",
+        "BugReportUrl": "https://github.com/kathbigra/activity-monitor-widget/issues"
+    },
+    "KPackageStructure": "Plasma/Applet",
+    "X-Plasma-API-Minimum-Version": "6.0"
+}
