@@ -2,9 +2,11 @@
 
 A privacy-first KDE Plasma 6 widget that tracks how much time you spend in each application — no cloud, no telemetry, everything stays on your machine.
 
-## Screenshot
+## Screenshots
 
-*(coming soon)*
+| Last 24 Hours | Today | This Week |
+|---|---|---|
+| ![Last 24 Hours](screenshots/last-24-hours.png) | ![Today](screenshots/today.png) | ![This Week](screenshots/this-week.png) |
 
 ## Features
 
