@@ -1,0 +1,64 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - goarch: amd64
+            suffix: linux-amd64
+          - goarch: arm64
+            suffix: linux-arm64
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: daemon/go.mod
+
+      - name: Build daemon
+        env:
+          GOOS: linux
+          GOARCH: ${{ matrix.goarch }}
+          CGO_ENABLED: 0
+        run: |
+          cd daemon
+          go build -ldflags "-X main.version=${{ github.ref_name }}" -o ../bin/screen-time .
+
+      - name: Package release
+        run: |
+          TAG=${{ github.ref_name }}
+          DIR="screen-time-${TAG}-${{ matrix.suffix }}"
+          mkdir -p "$DIR/bin" "$DIR/widget" "$DIR/install"
+          cp bin/screen-time "$DIR/bin/"
+          cp -r widget/. "$DIR/widget/"
+          cp install/install.sh install/screen-time.service "$DIR/install/"
+          tar -czf "${DIR}.tar.gz" "$DIR"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-${{ matrix.suffix }}
+          path: "*.tar.gz"
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          merge-multiple: true
+
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: "*.tar.gz"
+          generate_release_notes: true

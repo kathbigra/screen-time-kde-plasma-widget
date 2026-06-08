@@ -9,8 +9,14 @@ WIDGET_DEST="$HOME/.local/share/plasma/plasmoids/$WIDGET_ID"
 BIN_DIR="$HOME/.local/bin"
 SYSTEMD_DIR="$HOME/.config/systemd/user"
 
-echo "==> Building daemon..."
-(cd "$REPO_ROOT/daemon" && go build -o "$BIN_DIR/screen-time" .)
+if [ -f "$REPO_ROOT/bin/screen-time" ]; then
+    echo "==> Installing pre-built daemon..."
+    mkdir -p "$BIN_DIR"
+    cp "$REPO_ROOT/bin/screen-time" "$BIN_DIR/screen-time"
+else
+    echo "==> Building daemon..."
+    (cd "$REPO_ROOT/daemon" && go build -o "$BIN_DIR/screen-time" .)
+fi
 echo "    Binary: $BIN_DIR/screen-time"
 
 echo "==> Installing systemd service..."
@@ -18,7 +24,8 @@ mkdir -p "$SYSTEMD_DIR"
 cp "$SCRIPT_DIR/screen-time.service" "$SYSTEMD_DIR/screen-time.service"
 
 systemctl --user daemon-reload
-systemctl --user enable --now screen-time
+systemctl --user enable screen-time
+systemctl --user restart screen-time
 echo "    Service enabled and started."
 
 echo "==> Installing Plasma widget..."

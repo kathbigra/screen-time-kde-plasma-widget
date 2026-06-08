@@ -11,10 +11,15 @@ PlasmoidItem {
 
     readonly property string summaryPath: StandardPaths.writableLocation(StandardPaths.GenericDataLocation)
                                           + "/activity-monitor/summary.json"
+    readonly property string dataDir: StandardPaths.writableLocation(StandardPaths.GenericDataLocation)
+                                      + "/activity-monitor"
 
     property var summaryData: null
     property string currentFilter: "last_24_hours"
     property var activeFilterData: summaryData ? (summaryData.filters[currentFilter] || null) : null
+
+    property string latestVersion: ""
+    property bool updateAvailable: false
 
     readonly property var filterOptions: [
         { label: "Last 24 Hours",  key: "last_24_hours" },
@@ -35,6 +40,10 @@ PlasmoidItem {
             if (out === "") return
             try {
                 root.summaryData = JSON.parse(out)
+                // Check for updates once data is loaded and version is known.
+                if (root.summaryData.version && plasmoid.configuration.checkForUpdates) {
+                    root.checkForUpdates()
+                }
             } catch (e) {
                 console.error("activity-monitor: failed to parse summary.json:", e)
             }
@@ -45,6 +54,48 @@ PlasmoidItem {
         var path = summaryPath.toString().replace(/^file:\/\//, "")
         var cmd = "cat '" + path + "'"
         dataSource.connectSource(cmd)
+    }
+
+    function checkForUpdates() {
+        var xhr = new XMLHttpRequest()
+        xhr.open("GET", "https://api.github.com/repos/kathbigra/screen-time-kde-plasma-widget/releases/latest")
+        xhr.setRequestHeader("Accept", "application/vnd.github+json")
+        xhr.onreadystatechange = function() {
+            if (xhr.readyState !== XMLHttpRequest.DONE || xhr.status !== 200) return
+            try {
+                var data = JSON.parse(xhr.responseText)
+                var tag = data.tag_name || ""
+                root.latestVersion = tag
+                root.updateAvailable = isNewer(tag, root.summaryData ? root.summaryData.version : "")
+                    && tag !== plasmoid.configuration.dismissedVersion
+            } catch(e) {
+                console.error("activity-monitor: update check failed:", e)
+            }
+        }
+        xhr.send()
+    }
+
+    function isNewer(latest, current) {
+        if (!latest || !current) return false
+        var l = latest.replace(/^v/, "").split(".").map(Number)
+        var c = current.replace(/^v/, "").split(".").map(Number)
+        for (var i = 0; i < 3; i++) {
+            var lv = l[i] || 0
+            var cv = c[i] || 0
+            if (lv > cv) return true
+            if (lv < cv) return false
+        }
+        return false
+    }
+
+    function triggerUpdate() {
+        if (plasmoid.configuration.autoUpdate) {
+            var dir = dataDir.toString().replace(/^file:\/\//, "")
+            dataSource.connectSource("touch '" + dir + "/do_update'")
+        } else {
+            var cmd = "curl -sSL https://github.com/kathbigra/screen-time-kde-plasma-widget/releases/latest/download/install.sh | bash"
+            dataSource.connectSource("notify-send 'Screen Time " + root.latestVersion + " Available' 'Run in a terminal to update:\\n" + cmd + "'")
+        }
     }
 
     function formatMinutes(m) {
@@ -65,6 +116,14 @@ PlasmoidItem {
         onTriggered: root.loadData()
     }
 
+    // Re-check for updates every 24 hours.
+    Timer {
+        interval: 24 * 60 * 60 * 1000
+        running: plasmoid.configuration.checkForUpdates
+        repeat: true
+        onTriggered: root.checkForUpdates()
+    }
+
     preferredRepresentation: fullRepresentation
 
     compactRepresentation: PC3.Label {
@@ -79,6 +138,40 @@ PlasmoidItem {
         Layout.minimumHeight: Kirigami.Units.gridUnit * 16
         Layout.preferredHeight: Kirigami.Units.gridUnit * 22
         spacing: Kirigami.Units.smallSpacing
+
+        // ── Update banner ─────────────────────────────────────────────────
+        RowLayout {
+            visible: root.updateAvailable
+            Layout.fillWidth: true
+            spacing: Kirigami.Units.smallSpacing
+
+            Kirigami.Icon {
+                source: "update-none"
+                Layout.preferredWidth: Kirigami.Units.iconSizes.small
+                Layout.preferredHeight: Kirigami.Units.iconSizes.small
+            }
+
+            PC3.Label {
+                Layout.fillWidth: true
+                text: root.latestVersion + " available"
+                font.pointSize: Kirigami.Theme.smallFont.pointSize
+            }
+
+            PC3.Button {
+                text: "Update"
+                flat: true
+                onClicked: root.triggerUpdate()
+            }
+
+            PC3.Button {
+                text: "Dismiss"
+                flat: true
+                onClicked: {
+                    plasmoid.configuration.dismissedVersion = root.latestVersion
+                    root.updateAvailable = false
+                }
+            }
+        }
 
         // ── Header: filter selector + total time ──────────────────────────
         RowLayout {

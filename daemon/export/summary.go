@@ -12,6 +12,7 @@ import (
 
 type Summary struct {
 	GeneratedAt string                `json:"generated_at"`
+	Version     string                `json:"version"`
 	Filters     map[string]FilterData `json:"filters"`
 }
 
@@ -24,10 +25,11 @@ type FilterData struct {
 type SummaryExporter struct {
 	db         *storage.Database
 	outputPath string
+	version    string
 }
 
-func NewSummaryExporter(db *storage.Database, outputPath string) *SummaryExporter {
-	return &SummaryExporter{db: db, outputPath: outputPath}
+func NewSummaryExporter(db *storage.Database, outputPath, version string) *SummaryExporter {
+	return &SummaryExporter{db: db, outputPath: outputPath, version: version}
 }
 
 func (e *SummaryExporter) Export() error {
@@ -36,15 +38,10 @@ func (e *SummaryExporter) Export() error {
 
 	today := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, loc)
 
-	weekday := int(now.Weekday())
-	if weekday == 0 {
-		weekday = 7
-	}
-	weekStart := today.AddDate(0, 0, -(weekday - 1))
+	last7DaysStart := today.AddDate(0, 0, -6)
+	last28DaysStart := today.AddDate(0, 0, -27)
 
-	monthStart := time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, loc)
-
-	currentMonday := weekStart
+	currentMonday := isoMonday(today)
 	last12WeekStart := currentMonday.AddDate(0, 0, -11*7)
 
 	type filterSpec struct {
@@ -56,13 +53,14 @@ func (e *SummaryExporter) Export() error {
 	specs := []filterSpec{
 		{"last_24_hours", now.Add(-24 * time.Hour), e.buildHourlyChart},
 		{"today", today, e.buildTodayHourlyChart},
-		{"this_week", weekStart, e.buildWeekDailyChart},
-		{"this_month", monthStart, e.buildMonthWeeklyChart},
+		{"this_week", last7DaysStart, e.buildRollingWeekChart},
+		{"this_month", last28DaysStart, e.buildRollingMonthChart},
 		{"last_3_months", last12WeekStart, e.buildLast12WeeksChart},
 	}
 
 	summary := Summary{
 		GeneratedAt: now.UTC().Format(time.RFC3339),
+		Version:     e.version,
 		Filters:     make(map[string]FilterData, len(specs)),
 	}
 
@@ -134,22 +132,20 @@ func (e *SummaryExporter) buildTodayHourlyChart(from, to time.Time) ([]storage.C
 	return entries, nil
 }
 
-// buildWeekDailyChart builds exactly 7 daily bars (Mon–Sun), filling missing days with 0.
-func (e *SummaryExporter) buildWeekDailyChart(from, to time.Time) ([]storage.ChartEntry, error) {
-	weekEnd := from.AddDate(0, 0, 7)
-	dailyMap, err := e.db.DailyTotals(from, weekEnd)
+// buildRollingWeekChart builds exactly 7 daily bars for the last 7 days ending today.
+func (e *SummaryExporter) buildRollingWeekChart(from, to time.Time) ([]storage.ChartEntry, error) {
+	dailyMap, err := e.db.DailyTotals(from, to)
 	if err != nil {
 		return nil, err
 	}
 
 	todayStr := to.Format("2006-01-02")
-	dayNames := [7]string{"Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"}
 	entries := make([]storage.ChartEntry, 7)
 	for i := 0; i < 7; i++ {
 		day := from.AddDate(0, 0, i)
 		dayStr := day.Format("2006-01-02")
 		entries[i] = storage.ChartEntry{
-			Label:       dayNames[i],
+			Label:       day.Format("Mon"),
 			Minutes:     dailyMap[dayStr],
 			IsHighlight: dayStr == todayStr,
 		}
@@ -157,29 +153,25 @@ func (e *SummaryExporter) buildWeekDailyChart(from, to time.Time) ([]storage.Cha
 	return entries, nil
 }
 
-// buildMonthWeeklyChart builds weekly bars clipped to the current month.
-func (e *SummaryExporter) buildMonthWeeklyChart(from, to time.Time) ([]storage.ChartEntry, error) {
-	monthEnd := time.Date(from.Year(), from.Month()+1, 1, 0, 0, 0, 0, from.Location())
-
-	weekMap, err := e.db.WeeklyTotals(from, monthEnd)
+// buildRollingMonthChart builds exactly 4 weekly bars for the last 28 days ending today.
+func (e *SummaryExporter) buildRollingMonthChart(from, to time.Time) ([]storage.ChartEntry, error) {
+	dailyMap, err := e.db.DailyTotals(from, to)
 	if err != nil {
 		return nil, err
 	}
 
-	currentMonday := isoMonday(to)
-	firstWeekMonday := isoMonday(from)
-
-	var entries []storage.ChartEntry
-	for weekMon := firstWeekMonday; weekMon.Before(monthEnd); weekMon = weekMon.AddDate(0, 0, 7) {
-		clippedStart := weekMon
-		if clippedStart.Before(from) {
-			clippedStart = from
+	entries := make([]storage.ChartEntry, 4)
+	for i := 0; i < 4; i++ {
+		weekStart := from.AddDate(0, 0, i*7)
+		total := 0
+		for j := 0; j < 7; j++ {
+			total += dailyMap[weekStart.AddDate(0, 0, j).Format("2006-01-02")]
 		}
-		entries = append(entries, storage.ChartEntry{
-			Label:       clippedStart.Format("Jan 2"),
-			Minutes:     weekMap[weekMon.Format("2006-01-02")],
-			IsHighlight: weekMon.Equal(currentMonday),
-		})
+		entries[i] = storage.ChartEntry{
+			Label:       weekStart.Format("Jan 2"),
+			Minutes:     total,
+			IsHighlight: i == 3,
+		}
 	}
 	return entries, nil
 }
