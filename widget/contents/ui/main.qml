@@ -93,8 +93,8 @@ PlasmoidItem {
             var dir = dataDir.toString().replace(/^file:\/\//, "")
             dataSource.connectSource("touch '" + dir + "/do_update'")
         } else {
-            var cmd = "curl -sSL https://github.com/kathbigra/screen-time-kde-plasma-widget/releases/latest/download/install.sh | bash"
-            dataSource.connectSource("notify-send 'Screen Time " + root.latestVersion + " Available' 'Run in a terminal to update:\\n" + cmd + "'")
+            var url = "https://github.com/kathbigra/screen-time-kde-plasma-widget/releases/latest"
+            dataSource.connectSource("notify-send -a 'Screen Time' 'Screen Time " + root.latestVersion + " Available' 'Download the latest release:\\n" + url + "'")
         }
     }
 
