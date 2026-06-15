@@ -9,6 +9,9 @@ WIDGET_DEST="$HOME/.local/share/plasma/plasmoids/$WIDGET_ID"
 BIN_DIR="$HOME/.local/bin"
 SYSTEMD_DIR="$HOME/.config/systemd/user"
 
+echo "==> Stopping daemon if running..."
+systemctl --user stop screen-time 2>/dev/null || true
+
 if [ -f "$REPO_ROOT/bin/screen-time" ]; then
     echo "==> Installing pre-built daemon..."
     mkdir -p "$BIN_DIR"
